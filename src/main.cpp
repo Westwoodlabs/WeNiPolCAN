@@ -3,6 +3,7 @@
 
 #include "net.h"
 #include "wenipol.h"
+#include "fs.hpp"
 #include "util.h"
 #include "leds.h"
 #include "wifi_setup.h"
@@ -82,14 +83,13 @@ void setup() {
         } while ((pi = (esp_partition_next(pi))));
     }
 
-//    configTzTime("CET-1CEST,M3.5.0,M10.5.0/3", "0.nl.pool.ntp.org", "europe.pool.ntp.org", "time.nist.gov");
-    // https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
-    init_wenipol();
+    init_littlefs();
+    wenipol::init();
     init_wifi();
     init_network();
     hex_decode(logo_hex, logo_bin, sizeof(logo_bin));
 
-    #ifdef DEBUG
+    #ifdef DEBUG2
     logln("logo:");
     for (size_t i = 0; i < 12 * 48; i++) {
         print_byte(logo_bin[i]);
@@ -99,9 +99,9 @@ void setup() {
     }
     #endif
 
-    tx_frame(1, logo_bin);
-    show_frame(1, true, 200);
-    xTaskCreate(wenipol_task, "WeNiPol Process", 6000, nullptr, 2, nullptr);
+    wenipol::tx_frame(1, logo_bin);
+    wenipol::show_frame(1, true, 800);
+    xTaskCreate(wenipol::background_task, "WeNiPol Process", 64000, nullptr, 2, nullptr);
 
     #ifdef HAS_RGB_LED
     rgbIdle();

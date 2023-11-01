@@ -1,5 +1,11 @@
 #include "util.h"
 
+static boolean serial_write_failed = false;
+
+void set_serial_write_failed(boolean failed) {
+    serial_write_failed = failed;
+}
+
 size_t hex_decode(const String &hex, uint8_t *buf, size_t len) {
     size_t skip = 0;
     for (size_t i = 0; i < len; i++) {
@@ -30,4 +36,12 @@ const char *bit_rep[16] = {
 
 void print_byte(uint8_t byte) {
     Serial.printf("%s%s", bit_rep[byte >> 4], bit_rep[byte & 0x0F]);
+}
+
+boolean check_serial_write() {
+    if (!Serial)
+        return false;
+    if (!Serial.availableForWrite() && serial_write_failed)
+        return false;
+    return true;
 }

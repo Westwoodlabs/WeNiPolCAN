@@ -1,7 +1,10 @@
 #include "wenipol.h"
 #include "util.h"
 #include "leds.h"
+#include "gif.h"
 #include <mcp_can.h>
+#include <vector>
+#include <memory>
 
 #define CAN0_INT 4
 MCP_CAN CAN0(10);
@@ -12,18 +15,18 @@ constexpr uint32_t can_cmd_data       = 0x00900000;
 constexpr uint32_t can_cmd_trailer    = 0x00700000;
 constexpr uint32_t can_address_show   = 0x1FC01FDF;
 
-uint8_t can_clear_header[] { 0x00, 0x00, 0xFF, 0xFD, 0xFF, 0xFF, 0x7F, 0xF7};
-uint8_t can_clear_payload1[] {0x00, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
-uint8_t can_clear_payloadn[] {0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
 uint8_t can_frame_trailer[] {0xFF, 0x7F};
 
 uint32_t get_can_address(uint8_t x, uint8_t y);
 void encode_pixels(const uint8_t *pixels, uint8_t messages[8][8]);
 void copy_segment(const uint8_t *pixels, uint8_t *segment, uint8_t seg_x, uint8_t seg_y);
-void clear_segment(uint8_t x, uint8_t y);
+void clear_segment(uint8_t frame, uint8_t x, uint8_t y);
 void tx_segment(const uint8_t *segment_pixels, uint8_t frame, uint8_t x, uint8_t y);
 
 static SemaphoreHandle_t can_mutex;
+static String gif_path = "";
+static boolean reload_gif = false;
+static uint16_t brightness = 200;
 
 class CanLock {
 public:
@@ -39,7 +42,7 @@ public:
     }
 };
 
-void init_wenipol() {
+void wenipol::init() {
     can_mutex = xSemaphoreCreateBinary();
     xSemaphoreGive(can_mutex);
 
@@ -63,19 +66,13 @@ void init_wenipol() {
     logln("Init WeNiPol...");
     for (uint8_t x = 0; x < 3; x++) {
         for (uint8_t y = 0; y < 3; y++) {
-            clear_segment(x, y);
+            clear_segment(0, x, y);
         }
     }
     logln("Done");
 }
 
-void wenipol_task(void* parameter) {
-    while (1) {
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-    }
-}
-
-void tx_frame(uint8_t frame, uint8_t *frame_pixels) {
+void wenipol::tx_frame(uint8_t frame, uint8_t *frame_pixels) {
     CanLock lock(1000);
     if (!lock.success) {
         logln("tx_frame: unable to lock in 1000ms");
@@ -88,7 +85,7 @@ void tx_frame(uint8_t frame, uint8_t *frame_pixels) {
         for (size_t x = 0; x < 3; x++) {
             copy_segment(frame_pixels, segment, x, y);
             encode_pixels(segment, msg_bytes);
-            #ifdef DEBUG
+            #ifdef DEBUG2
             logln("encoded:");
             for (size_t i = 0; i < 8; i++) {
                 for (size_t j = 0; j < 8; j++) {
@@ -98,15 +95,18 @@ void tx_frame(uint8_t frame, uint8_t *frame_pixels) {
             }
             logln();
             #endif
-            clear_segment(x, y);
+            clear_segment(frame, x, y);
             tx_segment(segment, frame, x, y);
         }
     }
 }
 
-void clear_segment(uint8_t x, uint8_t y) {
+void clear_segment(uint8_t frame, uint8_t x, uint8_t y) {
     logf("clearing segment %d/%d\n", x, y);
     auto segment_address = get_can_address(x, y);
+    uint8_t can_clear_header[] { 0x00, 0x00, 0xFF, 0xFD, 0xFF, 0xFF, 0x7F, 0xF7};
+    uint8_t can_clear_payload1[] {0x00, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
+    uint8_t can_clear_payloadn[] {0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01};
     CAN0.sendMsgBuf(segment_address | can_cmd_header, 1, 8, can_clear_header);
     CAN0.sendMsgBuf(segment_address | can_cmd_data, 1, 8, can_clear_payload1);
     for (int i = 0; i < 7; ++i) {
@@ -130,7 +130,7 @@ void tx_segment(const uint8_t *segment_pixels, uint8_t frame, uint8_t x, uint8_t
     CAN0.sendMsgBuf(segment_address | can_cmd_trailer, 1, 2, can_frame_trailer);
 }
 
-void show_frame(uint8_t frame_id, boolean on, uint16_t brightness) {
+void wenipol::show_frame(uint8_t frame_id, boolean on, uint16_t brightness) {
     CanLock lock(1000);
     if (!lock.success) {
         logln("show_frame: unable to lock in 1000ms");
@@ -211,5 +211,46 @@ void encode_pixels(const uint8_t *pixels, uint8_t messages[8][8]) {
             messages[payload_index][payload_byte_index++] = row_data;
         }
         payload_index++;
+    }
+}
+
+void wenipol::show_gif(String& file_name) {
+    if (gif_path.equals(file_name)) {
+        logf("show_gif: already showing %s... reloading\n", file_name.c_str());
+    }
+    gif_path = file_name;
+    reload_gif = true;
+}
+
+void wenipol::set_brightness(uint16_t new_brightness) {
+    brightness = new_brightness;
+}
+
+[[noreturn]] void wenipol::background_task(void *parameter) {
+    std::unique_ptr<std::vector<frame>> frames = nullptr;
+    typeof(frames->begin()) current_frame = {};
+    while (true) {
+        if (reload_gif) {
+            frames = load_gif(gif_path);
+            if (!frames || frames->empty()) {
+                logln("Failed to load gif");
+            } else {
+                for (auto i = frames->begin(); i != frames->end(); i++) {
+                    tx_frame(i - frames->begin() + 1, i->pixels.data());
+                }
+                current_frame = frames->begin();
+            }
+            reload_gif = false;
+        }
+        if (current_frame != typeof(frames->begin()) {}) {
+            show_frame(current_frame - frames->begin() + 1, true, brightness);
+            vTaskDelay(current_frame->delay_ms / portTICK_PERIOD_MS);
+            current_frame++;
+            if (current_frame == frames->end()) {
+                current_frame = frames->begin();
+            }
+        } else {
+            vTaskDelay(100 / portTICK_PERIOD_MS);
+        }
     }
 }
