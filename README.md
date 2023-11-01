@@ -18,7 +18,7 @@ If the ESP cannot connect to a network, it will create its own network with the 
   The LED will be on if the value is 0xF0 or greater.
 - If all channels (R,G and B) are 0xF0 or greater, the LED won't be lit, \
   as "white" is interpreted as a background color.
-- GIFs MAY be animated and contain up to 63 frames. The animation timing will be applied, \
+- GIFs MAY be animated and contain any number of frames. The animation timing will be applied, \
   but the animation will be looped indefinitely always.
 - To upload a GIF use the following endpoint:
     ```shell

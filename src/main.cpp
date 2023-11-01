@@ -24,7 +24,7 @@ const String logo_hex =
         "8000aa0002aaaa8000aa00028000aa0002aaaa8000aa0002"
         "8002aa0002aaaa8002aa80028002aa800aaaaaa002aa8002"
         "800aaa800aaaaaa002aaa002a00aaa800aaaaaa002aaa00a"
-        "a02aaaa02aaaaaa88aaaa80a202aaaa02aaaaaa80aaaa808"
+        "a02aaaa02aaaaaa80aaaa80a202aaaa02aaaaaa80aaaa808"
         "20aaaaa02aaaaaa80aaaaa0828aaaaa8aaaaaaaa2aaaaa28"
         "08aaaaa8aaaaaaaa2aaaaa20082aaaa82aaaaaa82aaaa820"
         "0a2aaaaa2aaaaaa8aaaaa8a0020aaaaa2aaaaaa8aaaaa080"

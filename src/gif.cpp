@@ -98,7 +98,7 @@ std::unique_ptr<std::vector<frame>> load_gif(String &path) {
     gif.allocFrameBuf(gif_alloc);
     gif.setDrawType(GIF_DRAW_COOKED);
 
-    for (uint16_t frame_counter = 0; frame_counter < 64; frame_counter++) {
+    for (uint16_t frame_counter = 0; frame_counter < 2048; frame_counter++) {
         logf("loading frame %d\n", frame_counter);
         frame frame_data = {
             .pixels = {}, // initialize with zeroes

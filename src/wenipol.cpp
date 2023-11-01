@@ -23,6 +23,9 @@ void copy_segment(const uint8_t *pixels, uint8_t *segment, uint8_t seg_x, uint8_
 void clear_segment(uint8_t frame, uint8_t x, uint8_t y);
 void tx_segment(const uint8_t *segment_pixels, uint8_t frame, uint8_t x, uint8_t y);
 
+void show_frame_internal(uint8_t frame_id, boolean on, uint16_t brightness);
+void tx_frame_internal(uint8_t frame, uint8_t *frame_pixels, uint8_t show_frame);
+
 static SemaphoreHandle_t can_mutex;
 static String gif_path = "";
 static boolean reload_gif = false;
@@ -78,25 +81,17 @@ void wenipol::tx_frame(uint8_t frame, uint8_t *frame_pixels) {
         logln("tx_frame: unable to lock in 1000ms");
         return;
     }
+    tx_frame_internal(frame, frame_pixels, frame);
+}
 
+void tx_frame_internal(uint8_t frame, uint8_t *frame_pixels, uint8_t show_frame) {
     uint8_t segment[4 * 16]; // 4 bytes per row, 16 rows
-    uint8_t msg_bytes[8][8]; // 8 CAN messages, 8 bytes each
     for (size_t y = 0; y < 3; y++) {
         for (size_t x = 0; x < 3; x++) {
             copy_segment(frame_pixels, segment, x, y);
-            encode_pixels(segment, msg_bytes);
-            #ifdef DEBUG2
-            logln("encoded:");
-            for (size_t i = 0; i < 8; i++) {
-                for (size_t j = 0; j < 8; j++) {
-                    logf("%02X", msg_bytes[i][j]);
-                }
-                logln();
-            }
-            logln();
-            #endif
-            clear_segment(frame, x, y);
+            // clear_segment(frame, x, y);
             tx_segment(segment, frame, x, y);
+            show_frame_internal(show_frame, true, brightness);
         }
     }
 }
@@ -136,10 +131,14 @@ void wenipol::show_frame(uint8_t frame_id, boolean on, uint16_t brightness) {
         logln("show_frame: unable to lock in 1000ms");
         return;
     }
-    if (brightness > 2400) {
-        brightness = 2400;
+    if (brightness > wenipol::max_brightness) {
+        brightness = wenipol::max_brightness;
     }
     logf("showing frame %d, on=%d, brightness=%d\n", frame_id, on, brightness);
+    show_frame_internal(frame_id, on, brightness);
+}
+
+void show_frame_internal(uint8_t frame_id, boolean on, uint16_t brightness) {
     uint8_t can_frame_show[] {
         frame_id,
         (uint8_t ) (on ? 0x00 : 0x0f),
@@ -235,16 +234,28 @@ void wenipol::set_brightness(uint16_t new_brightness) {
             if (!frames || frames->empty()) {
                 logln("Failed to load gif");
             } else {
-                for (auto i = frames->begin(); i != frames->end(); i++) {
-                    tx_frame(i - frames->begin() + 1, i->pixels.data());
-                }
                 current_frame = frames->begin();
             }
             reload_gif = false;
         }
         if (current_frame != typeof(frames->begin()) {}) {
-            show_frame(current_frame - frames->begin() + 1, true, brightness);
-            vTaskDelay(current_frame->delay_ms / portTICK_PERIOD_MS);
+            unsigned long render_start = millis();
+            auto frame_index = current_frame - frames->begin();
+            {
+                CanLock lock(1000);
+                if (!lock.success) {
+                    logln("render_frame: unable to lock in 1000ms");
+                } else {
+                    tx_frame_internal((frame_index + 1) % 8 + 1, current_frame->pixels.data(), frame_index % 8 + 1);
+                    show_frame_internal((frame_index + 1) % 8 + 1, true, brightness);
+                }
+            }
+            unsigned long delay_millis = current_frame->delay_ms - (millis() - render_start);
+            if (delay_millis > 1000000) {
+                logf("bad delay: %lu\n", delay_millis);
+            } else {
+                vTaskDelay(delay_millis / portTICK_PERIOD_MS);
+            }
             current_frame++;
             if (current_frame == frames->end()) {
                 current_frame = frames->begin();
