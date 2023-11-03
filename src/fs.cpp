@@ -1,5 +1,4 @@
 #include <LittleFS.h>
-#include "FS.h"
 #include "util.h"
 #include "leds.h"
 #include "fs.hpp"
@@ -18,8 +17,9 @@ void init_littlefs() {
     if (!fs.exists("/gif")) {
         fs.mkdir("/gif");
     }
+    logf("LittleFS: %d bytes used, %d bytes free\n", fs.usedBytes(), fs.totalBytes() - fs.usedBytes());
 }
 
-fs::FS &get_fs() {
+fs::LittleFSFS &get_fs() {
     return LittleFS;
 }

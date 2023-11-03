@@ -29,7 +29,7 @@ void tx_frame_internal(uint8_t frame, uint8_t *frame_pixels, uint8_t show_frame)
 static SemaphoreHandle_t can_mutex;
 static String gif_path = "";
 static boolean reload_gif = false;
-static uint16_t brightness = 200;
+static uint16_t brightness = 1200;
 
 class CanLock {
 public:
@@ -228,6 +228,9 @@ void wenipol::set_brightness(uint16_t new_brightness) {
 [[noreturn]] void wenipol::background_task(void *parameter) {
     std::unique_ptr<std::vector<frame>> frames = nullptr;
     typeof(frames->begin()) current_frame = {};
+    uint8_t write_frame = 1;
+    uint8_t display_frame = 2;
+
     while (true) {
         if (reload_gif) {
             frames = load_gif(gif_path);
@@ -240,14 +243,14 @@ void wenipol::set_brightness(uint16_t new_brightness) {
         }
         if (current_frame != typeof(frames->begin()) {}) {
             unsigned long render_start = millis();
-            auto frame_index = current_frame - frames->begin();
             {
                 CanLock lock(1000);
                 if (!lock.success) {
                     logln("render_frame: unable to lock in 1000ms");
                 } else {
-                    tx_frame_internal((frame_index + 1) % 8 + 1, current_frame->pixels.data(), frame_index % 8 + 1);
-                    show_frame_internal((frame_index + 1) % 8 + 1, true, brightness);
+                    tx_frame_internal(write_frame, current_frame->pixels.data(), display_frame);
+                    auto tmp = write_frame; write_frame = display_frame; display_frame = tmp;
+                    show_frame_internal(display_frame, true, brightness);
                 }
             }
             unsigned long delay_millis = current_frame->delay_ms - (millis() - render_start);

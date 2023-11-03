@@ -1,7 +1,8 @@
 #pragma once
 
 #include "FS.h"
+#include "LittleFS.h"
 
 void init_littlefs();
 
-fs::FS &get_fs();
+fs::LittleFSFS &get_fs();
