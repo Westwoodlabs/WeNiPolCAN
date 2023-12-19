@@ -72,6 +72,7 @@ void wenipol::init() {
             clear_segment(0, x, y);
         }
     }
+    vTaskDelay(500 / portTICK_PERIOD_MS);
     logln("Done");
 }
 
@@ -231,12 +232,20 @@ void wenipol::set_brightness(uint16_t new_brightness) {
     uint8_t write_frame = 1;
     uint8_t display_frame = 2;
 
+    reload_gif = true;
+    gif_path = "/gif/boot.gif";
+
     while (true) {
         if (reload_gif) {
             frames = load_gif(gif_path);
             if (!frames || frames->empty()) {
                 logln("Failed to load gif");
             } else {
+                for (uint8_t x = 0; x < 3; x++) {
+                    for (uint8_t y = 0; y < 3; y++) {
+                        clear_segment(0, x, y);
+                    }
+                }
                 current_frame = frames->begin();
             }
             reload_gif = false;

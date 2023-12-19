@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <Wire.h>
+#include <rom/rtc.h>
 
 #include "net.h"
 #include "wenipol.h"
@@ -7,35 +8,6 @@
 #include "util.h"
 #include "leds.h"
 #include "wifi_setup.h"
-
-
-const String logo_hex =
-        "0000000002aaaa800000000000000000aa8002aa00000000"
-        "0000002a80000002a8000000000002a0000000000a800000"
-        "00000a000000000000a00000000028000000000000280000"
-        "0000a00000000000000a0000000200000000000000008000"
-        "000800000000000000002000002800000000000000002800"
-        "00a000000000000000000a00028000000002800000000280"
-        "0200000000028000000000800a00000000028000000000a0"
-        "08000000000aa0000000002008000000000aa00000000020"
-        "28000000000aa0000000002820000000002aa80000000008"
-        "20000000002aa80000000008a0000800002aa8000020000a"
-        "a000280000aaaa000028000a8000280000aaaa0000a80002"
-        "8000aa0002aaaa8000aa00028000aa0002aaaa8000aa0002"
-        "8002aa0002aaaa8002aa80028002aa800aaaaaa002aa8002"
-        "800aaa800aaaaaa002aaa002a00aaa800aaaaaa002aaa00a"
-        "a02aaaa02aaaaaa80aaaa80a202aaaa02aaaaaa80aaaa808"
-        "20aaaaa02aaaaaa80aaaaa0828aaaaa8aaaaaaaa2aaaaa28"
-        "08aaaaa8aaaaaaaa2aaaaa20082aaaa82aaaaaa82aaaa820"
-        "0a2aaaaa2aaaaaa8aaaaa8a0020aaaaa2aaaaaa8aaaaa080"
-        "028aaaaa0aaaaaa0aaaaa28000a2aaaa8aaaaaa2aaaa8a00"
-        "0028aaaa8aaaaaa2aaaa280000082aaa8aaaaaa2aaa82000"
-        "00020aaaa2aaaa8aaaa080000000a2aaa2aaaa8aaa8a0000"
-        "0000282aa2aaaa8aa828000000000a0aa8aaaa2aa0a00000"
-        "000002a028aaaa280a8000000000002a802aa802a8000000"
-        "00000000aa8002aa000000000000000002aaaa8000000000";
-
-uint8_t logo_bin[576];
 
 void setup() {
     vTaskDelay(200 / portTICK_PERIOD_MS);
@@ -84,23 +56,17 @@ void setup() {
     }
 
     init_littlefs();
-    wenipol::init();
     init_wifi();
     init_network();
-    hex_decode(logo_hex, logo_bin, sizeof(logo_bin));
-
-    #ifdef DEBUG2
-    logln("logo:");
-    for (size_t i = 0; i < 12 * 48; i++) {
-        print_byte(logo_bin[i]);
-        if (i % 12 == 11) {
-            logln();
-        }
+    auto resetReason = rtc_get_reset_reason(0);
+    if (resetReason == POWERON_RESET) {
+        // if we just got powered on, the WeNiPol was likely just plugged in as well.
+        // wait for the WeNiPol to initialize itself.
+        logln("waiting 10s for WeNiPol to initialize itself...");
+        vTaskDelay(10000 / portTICK_PERIOD_MS);
     }
-    #endif
+    wenipol::init();
 
-    wenipol::tx_frame(1, logo_bin);
-    wenipol::show_frame(1, true, 800);
     xTaskCreate(wenipol::background_task, "WeNiPol Process", 64000, nullptr, 2, nullptr);
 
     #ifdef HAS_RGB_LED

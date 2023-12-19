@@ -7,8 +7,9 @@
 void init_wifi() {
     WiFi.mode(WIFI_STA);
     WiFiManager wm;
+    wm.setHostname("wenipol");
     bool res;
-    res = wm.autoConnect("WeNiPol setup");
+    res = wm.autoConnect("WeNiPol setup", "*********");
     if (!res) {
         logln("Failed to connect");
         showColorPattern(CRGB::Yellow, CRGB::Red, CRGB::Red);
